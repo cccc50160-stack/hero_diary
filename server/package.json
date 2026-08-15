@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node test-auth.js"
+    "test": "node test-auth.js && node test-reminders.js"
   },
   "dependencies": {
     "express": "^4.19.2",
