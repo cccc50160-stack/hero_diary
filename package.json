@@ -1,0 +1,19 @@
+{
+  "name": "life-rpg-miniapp-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for the Life RPG Telegram Mini App — validates Telegram initData and stores each user's dashboard state in Postgres.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test-auth.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
