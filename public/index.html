@@ -342,6 +342,18 @@
     padding-top:8px;border-top:1px dashed var(--border-ink);font-family:var(--font-body);
     line-height:1.4;animation:loreReveal .5s ease;
   }
+  /* Второй голос — компаньон, реплика проще и теплее рассказчика, без своей рамки сверху,
+     чтобы визуально читаться как продолжение той же мысли, а не отдельный блок. */
+  .companion-line{
+    font-size:12px;color:var(--ink-soft);margin-top:4px;
+    font-family:var(--font-body);line-height:1.4;animation:loreReveal .5s ease;
+  }
+
+  /* ---------- Boss tab intro ---------- */
+  .boss-intro{
+    font-size:12px;color:var(--ink-soft);line-height:1.5;margin-bottom:10px;
+    padding:10px;border:1px dashed var(--border-ink);background:rgba(0,0,0,.05);
+  }
 
   /* ---------- Footer controls ---------- */
   .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px;justify-content:center;}
@@ -457,6 +469,7 @@
       <div class="meter-label" id="xpText">0 / 100 XP</div>
       <div class="companion-strip" id="companionStrip"></div>
       <div class="narrator-line" id="narratorLine"></div>
+      <div class="companion-line" id="companionLineEl"></div>
     </div>
     <div class="streak-badge">🔥<b id="streakNum">0</b>дней подряд</div>
   </header>
@@ -485,6 +498,7 @@
       <div class="tab" data-tab="boss">Боссы</div>
       <div class="tab" data-tab="done">Исполненные</div>
     </div>
+    <div class="boss-intro" id="bossIntro" style="display:none;"></div>
     <ul class="quest-list" id="questList"></ul>
   </section>
 
@@ -1558,6 +1572,7 @@
     document.getElementById("xpPipBar").innerHTML = renderPipBar(Math.round(pct/100*12), 12, "var(--gold)");
     document.getElementById("xpText").textContent = state.xp + " / " + need + " XP";
     document.getElementById("narratorLine").textContent = "💬 " + narratorLine();
+    document.getElementById("companionLineEl").textContent = companionStageFor(state.companion.level).emoji + " " + companionLine();
 
     renderCompanion();
     renderChapter();
@@ -1718,6 +1733,44 @@
     return lines[idx];
   }
 
+  // Второй голос рядом с рассказчиком — от лица компаньона. Та же механика (детерминированный
+  // выбор по хэшу дня + прогресса), только тон мягче и проще: не эпос, а кто-то рядом.
+  function companionLine(){
+    var s = state;
+    var lines = [];
+    var c = s.companion;
+    var level = c ? c.level : 1;
+    var bossDefeated = s.quests.some(function(q){ return q.type==="boss" && q.hp<=0; });
+
+    if(level < 3){
+      lines.push("Никто пока не знает, во что вырастет этот найдёныш — но он идёт рядом с самого первого дня.");
+    } else if(level < 6){
+      lines.push("Уже не тот несмышлёный найдёныш, что был вначале — но всё ещё учится, прямо как ты.");
+    } else {
+      lines.push("Он давно перестал быть просто попутчиком.");
+    }
+    if(bossDefeated){
+      lines.push("Он был рядом и в тот день, когда стало по-настоящему тяжело — не сомневался ни секунды.");
+    }
+    if(s.streak >= 14){
+      lines.push("Он привык, что ты рядом каждый день — кажется, это взаимно.");
+    } else if(s.streak === 0 && s.totalQuestsDone > 0){
+      lines.push("Он не в обиде за пропущенные дни — просто ждёт, когда ты снова тронешься в путь.");
+    }
+    if(s.totalQuestsDone > 0 && s.totalQuestsDone % 50 === 0){
+      lines.push("Столько пройдено вместе — а он всё так же рад каждому новому дню в пути.");
+    }
+
+    var idx = 0;
+    if(lines.length > 1){
+      var seed = todayStr().split("-").join("") + "_companion_" + s.totalQuestsDone;
+      var hash = 0;
+      for(var i=0;i<seed.length;i++){ hash = (hash * 31 + seed.charCodeAt(i)) >>> 0; }
+      idx = hash % lines.length;
+    }
+    return lines[idx];
+  }
+
   function renderChapter(){
     var ch = CHAPTERS[state.chapterIndex];
     var body = document.getElementById("chapterBody");
@@ -1768,9 +1821,24 @@
     grid.appendChild(addTile);
   }
 
+  // Общая рамка лора для вкладки боссов — не седьмой босс и не механика, просто фоновое
+  // понятие, объединяющее всех текущих боссов в одну силу вместо набора случайных монстров.
+  var LONG_STILLNESS_INTRO = "Фронтир зовёт эту тишину Долгим Штилем. У него нет тела и с ним нельзя " +
+    "сразиться напрямую — он просто оседает там, где что-то перестало двигаться. Диван, туман, " +
+    "тень, ком хаоса, стена молчания — это его лица, каждое в своей части жизни. Он не нападает. " +
+    "Он просто ждёт, пока ты остановишься сам.";
+
   function renderQuests(){
     var list = document.getElementById("questList");
     list.innerHTML = "";
+
+    var bossIntroEl = document.getElementById("bossIntro");
+    if(activeTab === "boss"){
+      bossIntroEl.textContent = "🌫️ " + LONG_STILLNESS_INTRO;
+      bossIntroEl.style.display = "block";
+    } else {
+      bossIntroEl.style.display = "none";
+    }
 
     var items;
     if(activeTab === "daily"){
