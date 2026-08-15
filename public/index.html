@@ -398,6 +398,23 @@
     padding:10px;border:1px dashed var(--border-ink);background:rgba(0,0,0,.05);
   }
 
+  /* ---------- Мировой босс (общий рейд) ---------- */
+  .wb-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;}
+  .wb-name{font-family:var(--font-display);font-size:16px;color:var(--ink);}
+  .wb-wave{font-family:var(--font-mono);font-size:11px;color:var(--ink-muted);letter-spacing:.04em;}
+  .wb-hp-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 4px;}
+  .wb-hp-text{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);}
+  .wb-foot{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--font-mono);font-size:11px;color:var(--ink-muted);margin-top:10px;}
+  .wb-foot b{color:var(--ink-soft);font-weight:normal;}
+  .wb-note{font-size:12px;color:var(--ink-soft);line-height:1.5;font-family:var(--font-body);}
+  /* Едва заметное «дыхание» тумана — босс общий и живой, даже когда ты на него не смотришь.
+     Отключается вместе со всей анимацией в prefers-reduced-motion (см. блок ниже). */
+  .wb-mist{animation:wbMist 6s ease-in-out infinite;display:inline-block;}
+  @keyframes wbMist{
+    0%,100%{opacity:.55;transform:translateX(0);}
+    50%{opacity:1;transform:translateX(3px);}
+  }
+
   /* ---------- Footer controls ---------- */
   .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px;justify-content:center;}
 
@@ -485,7 +502,7 @@
     .pip-bar.bar-pulse .pip, .quest-row.just-completed, .quest-row.boss-hit, .quest-check.just-checked,
     #levelUpBackdrop:not(.hidden) .modal, #levelUpBackdrop:not(.hidden) .big-emoji,
     .toast.ach, .ember, .block-particle, .ach-card.unlocked .ach-lore, .narrator-line,
-    .avatar-frame.tier-5{
+    .avatar-frame.tier-5, .wb-mist{
       animation:none !important;
     }
   }
@@ -545,6 +562,12 @@
     <div class="cat-filters" id="catFilters"></div>
     <div class="boss-intro" id="bossIntro" style="display:none;"></div>
     <ul class="quest-list" id="questList"></ul>
+  </section>
+
+  <section class="panel parchment" id="worldBossPanel">
+    <div class="panel-header"><h2><span class="wb-mist">🌫️</span> Общий рейд</h2></div>
+    <div class="panel-sub">Один Долгий Штиль на всех путников фронтира. Урон общий.</div>
+    <div id="worldBossBody"></div>
   </section>
 
   <section class="panel parchment" id="smokingPanel">
@@ -1032,6 +1055,11 @@
     expansionQuests().forEach(function(q){
       if(!getQuestById(q.id)){ state.quests.push(q); }
     });
+    // Сохранения, сделанные до появления общего босса, приходят без этого поля.
+    if(!state.worldBoss || typeof state.worldBoss !== "object"){
+      state.worldBoss = {wave:0, contribution:0, total:0};
+    }
+    if(typeof state.worldBoss.total !== "number"){ state.worldBoss.total = state.worldBoss.contribution || 0; }
   }
 
   var ACH_DEFS = [
@@ -1124,7 +1152,13 @@
       check:function(s){ return ["strength","intellect","discipline","health","household","social","dream"].every(function(k){ return (s.stats[k]||0) >= 50; }); }},
     {id:"companion_lvl5", icon:"🐴", title:"Верный спутник", desc:"Прокачай компаньона до 5 уровня",
       lore:"Он был рядом на каждом отрезке пути — не потому что должен, а потому что вы теперь команда.",
-      check:function(s){ return s.companion && s.companion.level >= 5; }}
+      check:function(s){ return s.companion && s.companion.level >= 5; }},
+    {id:"worldboss_first", icon:"🌫️", title:"Не в одиночку", desc:"Нанеси первый урон общему Долгому Штилю",
+      lore:"Оказалось, туман стоит не только над твоей тропой. И расходится он там, где по нему бьют сразу с нескольких сторон.",
+      check:function(s){ return !!(s.worldBoss && s.worldBoss.total >= 1); }},
+    {id:"worldboss_500", icon:"🤝", title:"Плечом к плечу", desc:"Нанеси 500 урона общему боссу · серебро",
+      lore:"Ты никогда не увидишь остальных в лицо. Но каждый вечер кто-то ещё бьёт в тот же туман, что и ты.",
+      check:function(s){ return !!(s.worldBoss && s.worldBoss.total >= 500); }}
   ];
   function achDef(id){ return ACH_DEFS.filter(function(a){return a.id===id;})[0]; }
 
@@ -1155,7 +1189,11 @@
       hadLateNightQuest:false,
       hadComebackAfterGap:false,
       lastChapterAdvanceDate:null,
-      lastBossDefeatDate:null
+      lastBossDefeatDate:null,
+      // Личный вклад в текущую волну общего босса. Сам босс живёт на сервере (он общий),
+      // здесь только «сколько урона по нему нанёс лично ты» — и номер волны, чтобы
+      // обнулить счётчик, когда босс сменился.
+      worldBoss:{wave:0, contribution:0, total:0}
     };
   }
 
@@ -1227,6 +1265,161 @@
         }
       });
     }, 1200);
+  }
+
+  /* ---------- Мировой босс: общий на всех игроков ----------
+     Личные боссы в списке заданий остаются как были — это твоя личная тропа. Мировой босс
+     живёт на сервере одной строкой и принимает урон от всех сразу: каждое выполненное
+     задание категории «боссы» бьёт и по нему тоже. Повержен — тут же поднимается следующий,
+     крепче предыдущего. Вне Telegram (или при недоступном сервере) вся эта секция просто
+     тихо выключается, ничего не ломая: локальная игра работает как раньше. */
+  var worldBoss = null;          // {hp, maxHp, defeatCount, wave} — null пока не загружен
+  var worldBossOffline = false;  // сервер не ответил: показываем честную заглушку, а не пустоту
+  var WORLD_BOSS_MAX_HIT = 200;  // тот же потолок, что на сервере — режем ещё до запроса
+  // Быстрая серия галочек шлёт несколько запросов сразу, и ответы могут вернуться не в том
+  // порядке. Вклад от этого не страдает (он складывается из applied каждого ответа), а вот
+  // HP на панели могло бы «скакать» назад — поэтому картинку рисует только самый свежий ответ.
+  var worldBossSeq = 0;
+
+  function ensureWorldBossState(){
+    if(!state.worldBoss || typeof state.worldBoss !== "object"){
+      state.worldBoss = {wave:0, contribution:0, total:0};
+    }
+    if(typeof state.worldBoss.total !== "number"){ state.worldBoss.total = state.worldBoss.contribution || 0; }
+    return state.worldBoss;
+  }
+
+  // Волна сменилась (босс пал — неважно, от твоего удара или чужого) — личный вклад
+  // начинается заново, иначе счётчик копил бы урон по давно убитым боссам.
+  function syncWorldBossWave(boss){
+    var mine = ensureWorldBossState();
+    if(mine.wave !== boss.wave){
+      mine.wave = boss.wave;
+      mine.contribution = 0;
+    }
+  }
+
+  async function fetchWorldBoss(){
+    var authHeader = tgAuthHeader();
+    if(!authHeader) return;
+    try{
+      var res = await fetch(API_BASE + "/api/worldboss", { headers: authHeader });
+      if(!res.ok) throw new Error("bad status");
+      var data = await res.json();
+      if(data && data.boss){
+        worldBoss = data.boss;
+        worldBossOffline = false;
+        syncWorldBossWave(worldBoss);
+        renderWorldBoss();
+      }
+    } catch(err){
+      worldBossOffline = true;
+      renderWorldBoss();
+    }
+  }
+
+  // delta > 0 — урон, delta < 0 — возврат урона (сняли галочку с задания). Симметрия
+  // обязательна: без неё «поставить-снять» было бы бесконечным источником урона.
+  async function sendWorldBossDamage(delta){
+    var authHeader = tgAuthHeader();
+    if(!authHeader || !delta) return;
+    var amount = Math.max(-WORLD_BOSS_MAX_HIT, Math.min(WORLD_BOSS_MAX_HIT, Math.round(delta)));
+    if(!amount) return;
+    var seq = ++worldBossSeq;
+    try{
+      var res = await fetch(API_BASE + "/api/worldboss/damage", {
+        method:"POST",
+        headers: Object.assign({ "Content-Type":"application/json" }, authHeader),
+        body: JSON.stringify({ amount: amount })
+      });
+      if(!res.ok) throw new Error("bad status");
+      var data = await res.json();
+      if(!data || !data.boss) return;
+      var wasWave = ensureWorldBossState().wave;
+      var boss = data.boss;
+
+      var mine = ensureWorldBossState();
+      // applied может быть 0 (лечение при полном HP) — поэтому проверяем тип, а не «правдивость»
+      var applied = (typeof boss.applied === "number") ? boss.applied : amount;
+      if(applied > 0){ mine.total += applied; } // накопительный итог за всё время, не обнуляется волнами
+
+      if(boss.defeated){
+        // Последний удар был твой — волна закрыта, счётчик вклада начинается заново.
+        showToast("🌫️ Долгий Штиль рассеян! Волна " + (boss.wave - 1) + " закрыта", "ach");
+        setTimeout(function(){
+          showToast("🌫️ На горизонте уже следующий — волна " + boss.wave + ", " + boss.maxHp + " HP");
+        }, 900);
+        mine.wave = boss.wave;
+        mine.contribution = 0;
+      } else {
+        if(wasWave !== boss.wave){
+          // Босса добил кто-то другой, пока мы играли — молча переезжаем на новую волну.
+          syncWorldBossWave(boss);
+        }
+        mine.contribution = Math.max(0, mine.contribution + applied);
+      }
+      if(seq === worldBossSeq){ worldBoss = boss; } // более свежий ответ уже мог обогнать этот
+      worldBossOffline = false;
+      renderWorldBoss();
+
+      // Ачивки за общего босса проверяем прямо здесь: ответ сервера приходит уже после
+      // основного checkAchievements() в afterProgress(), и без этой проверки они бы
+      // открывались с задержкой в одно действие.
+      checkAchievements().forEach(function(a, i){
+        setTimeout(function(){ showToast(a.icon + " Ачивка: " + a.title, "ach"); }, 1200 + i * 300);
+      });
+      renderAchievements();
+      scheduleServerSave();
+    } catch(err){
+      // Общий босс — вещь необязательная: если сервер не ответил, личный прогресс уже
+      // засчитан локально и терять его из-за сетевой ошибки незачем. Просто молчим.
+      worldBossOffline = true;
+      renderWorldBoss();
+    }
+  }
+
+  function renderWorldBoss(){
+    var panel = document.getElementById("worldBossPanel");
+    var el = document.getElementById("worldBossBody");
+    if(!panel || !el) return;
+
+    if(!tgAuthHeader()){
+      // Вне Telegram общего босса нет физически — нет и авторизации, по которой сервер
+      // отличает игроков. Прячем панель целиком, чтобы не дразнить мёртвым блоком.
+      panel.style.display = "none";
+      return;
+    }
+    panel.style.display = "";
+
+    if(!worldBoss){
+      el.innerHTML = '<div class="wb-note">' +
+        (worldBossOffline ? "Связи с фронтиром нет — общий рейд подтянется, когда сервер ответит."
+                          : "Разведка… узнаём, где сейчас стоит туман.") + '</div>';
+      return;
+    }
+
+    var pct = Math.max(0, Math.min(100, Math.round(worldBoss.hp / worldBoss.maxHp * 100)));
+    var filled = Math.round(pct / 100 * 12);
+    // Ниже трети — цвет тревожный: видно с одного взгляда, что осталось немного.
+    var color = pct > 60 ? "var(--ink-soft)" : pct > 30 ? "var(--warning)" : "var(--critical)";
+    var mine = ensureWorldBossState();
+
+    el.innerHTML =
+      '<div class="wb-head">' +
+        '<span class="wb-name">Долгий Штиль</span>' +
+        '<span class="wb-wave">волна ' + worldBoss.wave + '</span>' +
+      '</div>' +
+      '<div class="wb-hp-row">' +
+        renderPipBar(filled, 12, color) +
+        '<span class="wb-hp-text">' + worldBoss.hp + ' / ' + worldBoss.maxHp + ' HP</span>' +
+      '</div>' +
+      '<div class="wb-note">Он не нападает и его нельзя победить насовсем — можно только раз за разом ' +
+        'не давать ему повода стоять. Каждое закрытое задание категории «боссы» бьёт и по нему.</div>' +
+      '<div class="wb-foot">' +
+        '<span>рассеян раз: <b>' + worldBoss.defeatCount + '</b></span>' +
+        '<span>твой вклад в эту волну: <b>' + mine.contribution + '</b></span>' +
+        (worldBossOffline ? '<span>⚠️ данные могли устареть</span>' : '') +
+      '</div>';
   }
 
   function getStatDef(key){ return state.statDefs.filter(function(d){return d.key===key;})[0]; }
@@ -1347,6 +1540,12 @@
     }
     addCompanionXp(amount);
     var bossHits = applyBossDamage(category, amount);
+    // Тот же урон уходит и по общему боссу. Знак берём из самих hits: healed-удары — это
+    // отмена задания, и они должны вернуть HP ровно так же, как сняли.
+    if(bossHits.length){
+      var worldDelta = bossHits.reduce(function(sum, h){ return sum + (h.healed ? -h.dmg : h.dmg); }, 0);
+      sendWorldBossDamage(worldDelta); // намеренно без await: сеть не должна тормозить отклик интерфейса
+    }
     pushHistory(amount, category, sourceId);
     adjustGold(amount);
 
@@ -1719,6 +1918,7 @@
     renderJournal();
     renderStats();
     renderQuests();
+    renderWorldBoss();
     renderAchievements();
     renderSmoking();
     renderSleep();
@@ -2626,6 +2826,10 @@
     applyTheme(state.theme);
     render();
     showMissedToastIfAny();
+
+    // Общий босс подтягивается уже после первой отрисовки — он не должен задерживать
+    // появление собственно дневника, если сервер отвечает медленно.
+    fetchWorldBoss();
   })();
 })();
 </script>
