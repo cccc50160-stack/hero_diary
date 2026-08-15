@@ -79,7 +79,7 @@
     -webkit-font-smoothing:antialiased;
   }
   body[data-theme="minecraft"]{font-size:17px;}
-  .app{max-width:880px;margin:0 auto;padding:28px 16px 64px;}
+  .app{max-width:880px;margin:0 auto;padding:calc(28px + var(--tg-content-safe-area-inset-top, 0px)) 16px 64px;}
 
   h1,h2,h3{margin:0;font-weight:700;}
   h2{font-family:var(--font-display);font-weight:400;letter-spacing:.03em;text-transform:uppercase;font-size:19px;color:var(--ink);}
@@ -88,7 +88,10 @@
   .stamp{font-family:var(--font-mono);}
 
   .theme-toggle{
-    position:fixed;top:14px;right:14px;z-index:70;
+    /* Внизу, не вверху — верхние углы на телефоне и на десктопе занимают
+       собственные кнопки Telegram (закрыть/свернуть/меню), и наша кнопка там
+       либо перекрывалась ими, либо была недоступна для клика. */
+    position:fixed;bottom:14px;right:14px;z-index:70;
     font-family:var(--font-mono);font-size:12px;
     background:var(--paper);color:var(--ink);border:1px solid var(--ink);
     border-radius:var(--radius);padding:8px 12px;cursor:pointer;
