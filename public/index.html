@@ -2298,6 +2298,16 @@
     if(tg){
       tg.ready();
       tg.expand();
+      // На десктопном клиенте Telegram по умолчанию открывает мини-апп в маленьком
+      // фиксированном окне. Если клиент поддерживает полноэкранный режим (Bot API 8.0+),
+      // запрашиваем его — окно займёт куда больше места. На клиентах постарше это просто
+      // тихо ничего не делает, без ошибок.
+      if(typeof tg.requestFullscreen === "function"){
+        try{ tg.requestFullscreen(); }catch(e){}
+      }
+      if(typeof tg.onEvent === "function"){
+        tg.onEvent("viewportChanged", function(){ tg.expand(); });
+      }
     }
 
     var syncStatusEl = document.getElementById("syncStatus");
