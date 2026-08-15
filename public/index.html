@@ -268,6 +268,16 @@
   }
   .tab.active{color:var(--paper);background:var(--ink);border-color:var(--ink);}
 
+  /* Фильтр по теме — второй ряд чипов под вкладками типа, сужает список внутри
+     активной вкладки, а не подменяет её. */
+  .cat-filters{display:flex;gap:5px;margin:0 0 12px;flex-wrap:wrap;}
+  .cat-filter{
+    font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.02em;
+    color:var(--ink-soft);background:var(--paper-2);border:1px solid var(--border-ink);
+    border-radius:var(--radius);padding:4px 9px;cursor:pointer;display:flex;align-items:center;gap:4px;
+  }
+  .cat-filter.active{color:var(--paper);background:var(--ink);border-color:var(--ink);}
+
   .quest-list{list-style:none;margin:0;padding:0;}
   .quest-row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px dashed var(--border-ink);flex-wrap:wrap;border-radius:var(--radius);transition:box-shadow .3s ease;}
   .quest-row:last-child{border-bottom:none;}
@@ -532,6 +542,7 @@
       <div class="tab" data-tab="boss">Боссы</div>
       <div class="tab" data-tab="done">Исполненные</div>
     </div>
+    <div class="cat-filters" id="catFilters"></div>
     <div class="boss-intro" id="bossIntro" style="display:none;"></div>
     <ul class="quest-list" id="questList"></ul>
   </section>
@@ -844,13 +855,6 @@
       {id:"q_weekplan",title:"Составить план на неделю", category:"discipline", type:"oneoff", xp:25, done:false, doneDate:null, timesCompleted:0},
       {id:"q_learn",   title:"Выучить что-то новое", category:"intellect", type:"oneoff", xp:35, done:false, doneDate:null, timesCompleted:0},
 
-      {id:"proj_sprint", title:"Спринт «перезапуск проекта»: 7 дней основной работы", category:"discipline",
-        type:"counter", target:7, progress:0, xp:15, done:false, timesCompleted:0},
-      {id:"proj_ads", title:"Запустить рекламу проекта", category:"discipline",
-        type:"oneoff", xp:50, done:false, doneDate:null, timesCompleted:0, requires:"proj_sprint"},
-      {id:"proj_miniapp", title:"Перевести бота в мини-апп", category:"intellect",
-        type:"oneoff", xp:80, done:false, doneDate:null, timesCompleted:0, requires:"proj_ads"},
-
       {id:"boss_procrastination", title:"Босс: Гора прокрастинации", category:"discipline",
         type:"boss", maxHp:140, hp:140, done:false, timesCompleted:0,
         lore:"Она выросла не за один день — из отложенных дел, недоделанных списков и «начну завтра». Она не нападает: она просто стоит на пути и ждёт, пока ты остановишься сам. Единственное, что причиняет ей вред, — это то, что ты всё-таки делаешь, а не собираешься сделать."}
@@ -865,18 +869,72 @@
       {id:"work_inbox",  title:"Разобрать входящие / почту до нуля", category:"discipline", type:"oneoff", xp:20, done:false, doneDate:null, timesCompleted:0},
       {id:"work_skill",  title:"Изучить новый инструмент по специальности", category:"intellect", type:"oneoff", xp:35, done:false, doneDate:null, timesCompleted:0},
       {id:"work_course", title:"Пройти курс / лекции по специальности", category:"intellect", type:"counter", target:10, progress:0, xp:15, done:false, timesCompleted:0},
+      {id:"disc_wakeup",   title:"Встать по будильнику без залипания", category:"discipline", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
+      {id:"disc_noscroll", title:"День без бесцельного скролла соцсетей", category:"discipline", type:"daily", xp:25, done:false, doneDate:null, timesCompleted:0},
+      {id:"disc_planday",  title:"Составить план на завтра с вечера", category:"discipline", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
+      {id:"disc_habit",    title:"Продержаться без сорванной привычки весь день", category:"discipline", type:"daily", xp:20, done:false, doneDate:null, timesCompleted:0},
+      {id:"disc_deepwork", title:"10 фокус-сессий по методике (помидоро и т.п.)", category:"discipline", type:"counter", target:10, progress:0, xp:15, done:false, timesCompleted:0},
+      {id:"disc_review",   title:"Разобрать неделю: что сработало, что нет", category:"discipline", type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0},
+      {id:"disc_bigtask",  title:"Закрыть одну по-настоящему сложную задачу, которую откладывал", category:"discipline", type:"oneoff", xp:40, done:false, doneDate:null, timesCompleted:0},
+      {id:"int_podcast",  title:"Послушать обучающий подкаст/лекцию", category:"intellect", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
+      {id:"int_notes",    title:"Законспектировать то, что прочитал/выучил", category:"intellect", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"int_article",  title:"Прочитать статью по специальности", category:"intellect", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"int_language", title:"20 минут практики иностранного языка", category:"intellect", type:"daily", xp:20, done:false, doneDate:null, timesCompleted:0},
+      {id:"int_teach",    title:"Объяснить кому-то то, что выучил (закрепление)", category:"intellect", type:"oneoff", xp:25, done:false, doneDate:null, timesCompleted:0},
+      {id:"int_book",     title:"Дочитать книгу целиком", category:"intellect", type:"oneoff", xp:50, done:false, doneDate:null, timesCompleted:0},
+      {id:"int_project",  title:"Применить новое знание на практике в реальной задаче", category:"intellect", type:"oneoff", xp:40, done:false, doneDate:null, timesCompleted:0},
+      {id:"int_quiz",     title:"Пройти тест/практику по теме 10 раз", category:"intellect", type:"counter", target:10, progress:0, xp:10, done:false, timesCompleted:0},
+
+      // Сила
+      {id:"str_stretch",     title:"Растяжка / зарядка 10 минут", category:"strength", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
+      {id:"str_walk",        title:"Пройти пешком не меньше 5000 шагов", category:"strength", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
+      {id:"str_water",       title:"Выпить достаточно воды за день", category:"strength", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"str_homeworkout", title:"Домашняя тренировка без зала", category:"strength", type:"daily", xp:20, done:false, doneDate:null, timesCompleted:0},
+      {id:"str_run",         title:"Пробежка", category:"strength", type:"daily", xp:25, done:false, doneDate:null, timesCompleted:0},
+      {id:"str_newexercise", title:"Освоить новое упражнение / технику", category:"strength", type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0},
+      {id:"str_gearup",      title:"Обновить/докупить спортивный инвентарь", category:"strength", type:"oneoff", xp:20, done:false, doneDate:null, timesCompleted:0},
+      {id:"str_pr",          title:"Поставить личный рекорд в любом упражнении", category:"strength", type:"oneoff", xp:40, done:false, doneDate:null, timesCompleted:0},
+      {id:"str_month",       title:"20 силовых тренировок подряд по программе", category:"strength", type:"counter", target:20, progress:0, xp:15, done:false, timesCompleted:0},
+
+      // Здоровье
+      {id:"hlth_sleep8",     title:"Поспать минимум 7-8 часов", category:"health", type:"daily", xp:20, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_veg",        title:"Съесть овощи/фрукты хотя бы раз за день", category:"health", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_nojunk",     title:"День без сладкой газировки/фастфуда", category:"health", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_backcare",   title:"Разминка для спины/шеи от сидячей работы", category:"health", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_freshair",   title:"Провести время на свежем воздухе", category:"health", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_screenbreak",title:"Перерыв от экрана хотя бы раз в час", category:"health", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_checkup",    title:"Пройти плановый осмотр/чекап у врача", category:"health", type:"oneoff", xp:40, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_dentist",    title:"Сходить к стоматологу", category:"health", type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_mealprep",   title:"Приготовить еду впрок на несколько дней", category:"health", type:"oneoff", xp:25, done:false, doneDate:null, timesCompleted:0},
+      {id:"hlth_earlybed",   title:"10 дней подряд лечь спать до полуночи", category:"health", type:"counter", target:10, progress:0, xp:15, done:false, timesCompleted:0},
 
       // Быт и порядок
       {id:"home_dishes", title:"Помыть посуду / убрать за собой сразу", category:"household", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
       {id:"home_tidy10", title:"10 минут уборки / разбора вещей", category:"household", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
       {id:"home_drawer", title:"Навести порядок в ящике/шкафу, который давно бесит", category:"household", type:"oneoff", xp:25, done:false, doneDate:null, timesCompleted:0},
       {id:"home_clean",  title:"Генеральная уборка по зонам квартиры", category:"household", type:"counter", target:5, progress:0, xp:20, done:false, timesCompleted:0},
+      {id:"home_laundry",   title:"Постирать и разобрать бельё", category:"household", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"home_trash",     title:"Вынести мусор / рассортировать", category:"household", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"home_plants",    title:"Полить цветы / позаботиться о питомце", category:"household", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"home_bills",     title:"Оплатить счета / разобраться с бытовыми делами", category:"household", type:"oneoff", xp:20, done:false, doneDate:null, timesCompleted:0},
+      {id:"home_fridge",    title:"Разобрать холодильник, выкинуть просрочку", category:"household", type:"oneoff", xp:20, done:false, doneDate:null, timesCompleted:0},
+      {id:"home_repair",    title:"Починить то, что давно сломано", category:"household", type:"oneoff", xp:35, done:false, doneDate:null, timesCompleted:0},
+      {id:"home_declutter", title:"Избавиться от ненужных вещей (отдать/выкинуть)", category:"household", type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0},
+      {id:"home_organize",  title:"Навести систему хранения в 8 местах", category:"household", type:"counter", target:8, progress:0, xp:15, done:false, timesCompleted:0},
 
       // Отношения и общение
       {id:"soc_checkin", title:"Написать/позвонить близкому человеку просто так", category:"social", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
       {id:"soc_meetup",  title:"Встретиться вживую с другом, с которым давно не виделись", category:"social", type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0},
       {id:"soc_mend",    title:"Закрыть неловкий разговор, который откладывал", category:"social", type:"oneoff", xp:35, done:false, doneDate:null, timesCompleted:0},
       {id:"soc_together",title:"Провести время с близкими", category:"social", type:"counter", target:8, progress:0, xp:15, done:false, timesCompleted:0},
+      {id:"soc_family",     title:"Позвонить/навестить родителей или близких родственников", category:"social", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
+      {id:"soc_compliment", title:"Сказать кому-то искреннее доброе слово", category:"social", type:"daily", xp:10, done:false, doneDate:null, timesCompleted:0},
+      {id:"soc_listen",     title:"Выслушать кого-то без своего мнения, просто поддержать", category:"social", type:"daily", xp:15, done:false, doneDate:null, timesCompleted:0},
+      {id:"soc_gift",       title:"Сделать небольшой подарок/сюрприз просто так", category:"social", type:"oneoff", xp:25, done:false, doneDate:null, timesCompleted:0},
+      {id:"soc_newcontact", title:"Познакомиться с новым человеком / расширить круг", category:"social", type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0},
+      {id:"soc_apology",    title:"Извиниться, если был неправ", category:"social", type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0},
+      {id:"soc_boundary",   title:"Спокойно отстоять свою границу в разговоре", category:"social", type:"oneoff", xp:25, done:false, doneDate:null, timesCompleted:0},
+      {id:"soc_group",      title:"Провести время в компании друзей 6 раз", category:"social", type:"counter", target:6, progress:0, xp:15, done:false, timesCompleted:0},
 
       // Боссы — по одному на стат, каждый получает урон автоматически от реальных заданий своей
       // категории (см. applyBossDamage), без ручных кликов «атаковать»
@@ -922,22 +980,41 @@
     ];
   }
 
+  // Личная линия про сам проект «Life RPG» (спринт перезапуска / реклама / перевод в мини-апп) —
+  // это буквально про эту самую игру, никакого смысла для чужого пользователя. Раньше эти три
+  // квеста ещё и были требованиями для перехода между главами II→III→IV→V — но
+  // chapterRequirementStatus() уже умеет корректно обходить отсутствующий квест (см. её код:
+  // если getQuestById(req.questId) не находит квест, questMet остаётся true по умолчанию), так
+  // что для всех остальных эти главы просто открываются по общему счётчику выполненных заданий,
+  // без блокировки на несуществующем личном квесте.
+  function personalProjectQuests(){
+    return [
+      {id:"proj_sprint", title:"Спринт «перезапуск проекта»: 7 дней основной работы", category:"discipline",
+        type:"counter", target:7, progress:0, xp:15, done:false, timesCompleted:0},
+      {id:"proj_ads", title:"Запустить рекламу проекта", category:"discipline",
+        type:"oneoff", xp:50, done:false, doneDate:null, timesCompleted:0, requires:"proj_sprint"},
+      {id:"proj_miniapp", title:"Перевести бота в мини-апп", category:"intellect",
+        type:"oneoff", xp:80, done:false, doneDate:null, timesCompleted:0, requires:"proj_ads"}
+    ];
+  }
+
   function defaultQuests(){
     return coreQuests().concat(expansionQuests());
   }
 
   // Числовой Telegram ID владельца (не username, не отображаемое имя) — только Степе
-  // подмешивается личная ветка мечты (мотоцикл), см. isOwner()/mergePersonalContentIfOwner().
+  // подмешивается личный контент (мечта-мотоцикл, линия про сам проект), см.
+  // isOwner()/mergePersonalContentIfOwner().
   var OWNER_TELEGRAM_ID = 5388949940;
   function isOwner(){
     return !!(OWNER_TELEGRAM_ID && tg && tg.initDataUnsafe && tg.initDataUnsafe.user &&
       tg.initDataUnsafe.user.id === OWNER_TELEGRAM_ID);
   }
-  // Аддитивный бэкфилл личной ветки — не трогает уже существующие квесты, ничего не удаляет,
+  // Аддитивный бэкфилл личного контента — не трогает уже существующие квесты, ничего не удаляет,
   // безопасно вызывать повторно (в том числе после сброса прогресса).
   function mergePersonalContentIfOwner(){
     if(!isOwner()) return;
-    personalDreamQuests().forEach(function(q){
+    personalDreamQuests().concat(personalProjectQuests()).forEach(function(q){
       if(!getQuestById(q.id)){ state.quests.push(q); }
     });
   }
@@ -1612,6 +1689,7 @@
 
   /* ---------- Rendering ---------- */
   var activeTab = "daily";
+  var activeCatFilter = "all";
 
   function classTitleFor(level){
     var title = CLASS_TITLES[0].title;
@@ -1919,6 +1997,27 @@
       items = state.quests.filter(function(q){ return (isQuestSatisfied(q) && q.type !== "daily" && q.type !== "boss") || (q.type==="daily" && q.done); });
     }
 
+    // Чипы фильтра по теме строятся из тем, реально присутствующих в этой вкладке —
+    // так не показываем фильтр на категорию, где в текущей вкладке всё равно пусто.
+    var catFiltersEl = document.getElementById("catFilters");
+    var presentCats = [];
+    items.forEach(function(q){ if(presentCats.indexOf(q.category) === -1){ presentCats.push(q.category); } });
+    if(presentCats.length > 1){
+      if(activeCatFilter !== "all" && presentCats.indexOf(activeCatFilter) === -1){ activeCatFilter = "all"; }
+      var chipsHtml = '<div class="cat-filter' + (activeCatFilter==="all"?" active":"") + '" data-cat="all">Все</div>';
+      presentCats.forEach(function(catKey){
+        var def = getStatDef(catKey);
+        chipsHtml += '<div class="cat-filter' + (activeCatFilter===catKey?" active":"") + '" data-cat="' + catKey + '">' +
+          (def ? def.icon + " " + escapeHtml(def.label) : catKey) + '</div>';
+      });
+      catFiltersEl.innerHTML = chipsHtml;
+      catFiltersEl.style.display = "flex";
+      if(activeCatFilter !== "all"){ items = items.filter(function(q){ return q.category === activeCatFilter; }); }
+    } else {
+      catFiltersEl.innerHTML = "";
+      catFiltersEl.style.display = "none";
+    }
+
     if(!items.length){
       var empty = document.createElement("div");
       empty.className = "empty-state";
@@ -2202,6 +2301,14 @@
       tab.parentElement.querySelectorAll(".tab").forEach(function(t){ t.classList.remove("active"); });
       tab.classList.add("active");
       activeTab = tab.getAttribute("data-tab");
+      activeCatFilter = "all";
+      renderQuests();
+      return;
+    }
+
+    var catFilter = e.target.closest(".cat-filter[data-cat]");
+    if(catFilter){
+      activeCatFilter = catFilter.getAttribute("data-cat");
       renderQuests();
       return;
     }
