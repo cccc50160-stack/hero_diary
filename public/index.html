@@ -99,6 +99,18 @@
   }
   .theme-toggle:hover{filter:brightness(1.05);}
 
+  .ach-toggle{
+    /* Нижний левый угол — симметрично кнопке темы, тоже подальше от кнопок Telegram. */
+    position:fixed;bottom:14px;left:14px;z-index:70;
+    font-family:var(--font-mono);font-size:12px;
+    background:var(--paper);color:var(--ink);border:1px solid var(--ink);
+    border-radius:var(--radius);padding:8px 12px;cursor:pointer;
+    box-shadow:0 3px 10px rgba(0,0,0,.35);
+  }
+  .ach-toggle:hover{filter:brightness(1.05);}
+  .modal.modal-wide{max-width:720px;text-align:left;}
+  .modal.modal-wide h3{text-align:center;}
+
   /* ---------- Parchment panel base ---------- */
   .parchment{
     background:
@@ -430,6 +442,7 @@
 <body>
 <div id="ambience"></div>
 <button class="theme-toggle" id="themeToggleBtn">🤠 RDR2</button>
+<button class="ach-toggle" id="achToggleBtn">🏆 Ачивки</button>
 <div class="app">
 
   <header class="hero parchment">
@@ -511,11 +524,6 @@
     </div>
     <div class="panel-sub">Золото копится само — 1 за каждые ~10 XP. Обмен на награды честный, без проверок — это для тебя самого.</div>
     <div id="rewardsBody"></div>
-  </section>
-
-  <section class="panel parchment" id="achPanel">
-    <div class="panel-header"><h2>Компендиум</h2></div>
-    <div class="ach-grid" id="achGrid"></div>
   </section>
 
   <div class="controls">
@@ -631,6 +639,17 @@
     <div class="modal-actions" style="justify-content:center;">
       <button class="btn ghost" id="confirmCancel">Отмена</button>
       <button class="btn danger" id="confirmOk">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Achievements modal -->
+<div class="modal-backdrop hidden" id="achBackdrop">
+  <div class="modal modal-wide parchment">
+    <h3>🏆 Компендиум</h3>
+    <div class="ach-grid" id="achGrid"></div>
+    <div class="modal-actions" style="justify-content:center;">
+      <button class="btn" id="achClose">Закрыть</button>
     </div>
   </div>
 </div>
@@ -783,20 +802,6 @@
       {id:"soc_mend",    title:"Закрыть неловкий разговор, который откладывал", category:"social", type:"oneoff", xp:35, done:false, doneDate:null, timesCompleted:0},
       {id:"soc_together",title:"Провести время с близкими", category:"social", type:"counter", target:8, progress:0, xp:15, done:false, timesCompleted:0},
 
-      // Мечта — конкретная цель со своей цепочкой шагов (для Степы: мотоцикл)
-      {id:"dream_theory",  title:"Записаться в мотошколу и начать теорию (категория А)", category:"dream",
-        type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0,
-        lore:"Мечта перестаёт быть просто мыслью в тот момент, когда ты записываешь первый шаг к ней в календарь."},
-      {id:"dream_license", title:"Сдать на права категории А", category:"dream",
-        type:"oneoff", xp:60, done:false, doneDate:null, timesCompleted:0, requires:"dream_theory",
-        lore:"Бумага в кармане — но это ещё не мечта. Это просто разрешение начать её преследовать по-настоящему."},
-      {id:"dream_practice", title:"Практика вождения", category:"dream",
-        type:"counter", target:10, progress:0, xp:15, done:false, timesCompleted:0, requires:"dream_license",
-        lore:"Каждый выезд немного увереннее предыдущего. Так и осваивается то, что раньше казалось чужим ремеслом."},
-      {id:"dream_buy", title:"Купить мотоцикл", category:"dream",
-        type:"oneoff", xp:120, done:false, doneDate:null, timesCompleted:0, requires:"dream_practice",
-        lore:"То, что долго было просто картинкой в голове, наконец стоит во дворе и ждёт ключ в замке зажигания."},
-
       // Боссы — по одному на стат, каждый получает урон автоматически от реальных заданий своей
       // категории (см. applyBossDamage), без ручных кликов «атаковать»
       {id:"boss_sofa", title:"Босс: Диван-трясина", category:"strength",
@@ -813,7 +818,28 @@
         lore:"Он растёт из одной немытой чашки. Дай ему пару недель — и он займёт весь стол, а потом и всю комнату."},
       {id:"boss_silence", title:"Босс: Стена молчания", category:"social",
         type:"boss", maxHp:130, hp:130, done:false, timesCompleted:0,
-        lore:"Она строится не из ссор, а из несделанных звонков. Каждый день тишины кладёт ещё один кирпич."},
+        lore:"Она строится не из ссор, а из несделанных звонков. Каждый день тишины кладёт ещё один кирпич."}
+    ];
+  }
+
+  // Личная ветка мечты (мотоцикл) — НЕ входит в общий контент для всех пользователей.
+  // Добавляется точечно, только владельцу (см. isOwner()/OWNER_TELEGRAM_ID), в boot().
+  // boss_doubt.maxHp намеренно = сумме XP всей цепочки (30+60+150+120=360), чтобы босс
+  // умирал ровно тогда, когда цепочка мечты закрыта целиком.
+  function personalDreamQuests(){
+    return [
+      {id:"dream_theory",  title:"Записаться в мотошколу и начать теорию (категория А)", category:"dream",
+        type:"oneoff", xp:30, done:false, doneDate:null, timesCompleted:0,
+        lore:"Мечта перестаёт быть просто мыслью в тот момент, когда ты записываешь первый шаг к ней в календарь."},
+      {id:"dream_license", title:"Сдать на права категории А", category:"dream",
+        type:"oneoff", xp:60, done:false, doneDate:null, timesCompleted:0, requires:"dream_theory",
+        lore:"Бумага в кармане — но это ещё не мечта. Это просто разрешение начать её преследовать по-настоящему."},
+      {id:"dream_practice", title:"Практика вождения", category:"dream",
+        type:"counter", target:10, progress:0, xp:15, done:false, timesCompleted:0, requires:"dream_license",
+        lore:"Каждый выезд немного увереннее предыдущего. Так и осваивается то, что раньше казалось чужим ремеслом."},
+      {id:"dream_buy", title:"Купить мотоцикл", category:"dream",
+        type:"oneoff", xp:120, done:false, doneDate:null, timesCompleted:0, requires:"dream_practice",
+        lore:"То, что долго было просто картинкой в голове, наконец стоит во дворе и ждёт ключ в замке зажигания."},
       {id:"boss_doubt", title:"Босс: Голос сомнения", category:"dream",
         type:"boss", maxHp:360, hp:360, done:false, timesCompleted:0,
         lore:"Он не спорит и не запрещает — он просто раз за разом спрашивает «а точно сейчас?». Единственный способ заставить его замолчать — довести мечту до конца, шаг за шагом."}
@@ -822,6 +848,22 @@
 
   function defaultQuests(){
     return coreQuests().concat(expansionQuests());
+  }
+
+  // Числовой Telegram ID владельца (не username, не отображаемое имя) — только Степе
+  // подмешивается личная ветка мечты (мотоцикл), см. isOwner()/mergePersonalContentIfOwner().
+  var OWNER_TELEGRAM_ID = 5388949940;
+  function isOwner(){
+    return !!(OWNER_TELEGRAM_ID && tg && tg.initDataUnsafe && tg.initDataUnsafe.user &&
+      tg.initDataUnsafe.user.id === OWNER_TELEGRAM_ID);
+  }
+  // Аддитивный бэкфилл личной ветки — не трогает уже существующие квесты, ничего не удаляет,
+  // безопасно вызывать повторно (в том числе после сброса прогресса).
+  function mergePersonalContentIfOwner(){
+    if(!isOwner()) return;
+    personalDreamQuests().forEach(function(q){
+      if(!getQuestById(q.id)){ state.quests.push(q); }
+    });
   }
 
   // Backfills new stat categories / quests / achievement entries into an already-loaded save
@@ -907,10 +949,10 @@
       lore:"Оказалось, что связь с людьми, как и всё остальное, требует практики — и она у тебя есть.",
       check:function(s){ return s.quests.filter(function(q){ return q.category==="social"; }).reduce(function(a,q){ return a+(q.timesCompleted||0); },0) >= 10; }},
     {id:"dream_started", icon:"🏍️", title:"Первый шаг к мечте", desc:"Начни цепочку своей мечты",
-      lore:"Мечта официально перестала быть только мыслью.",
+      lore:"Мечта официально перестала быть только мыслью.", requiresQuestId:"dream_theory",
       check:function(s){ var q = s.quests.filter(function(x){return x.id==="dream_theory";})[0]; return q && isQuestSatisfied(q); }},
     {id:"dream_fulfilled", icon:"🏆", title:"Мечта сбылась", desc:"Доведи цепочку мечты до конца",
-      lore:"То, что когда-то было просто желанием, теперь стоит рядом — настоящее.",
+      lore:"То, что когда-то было просто желанием, теперь стоит рядом — настоящее.", requiresQuestId:"dream_buy",
       check:function(s){ var q = s.quests.filter(function(x){return x.id==="dream_buy";})[0]; return q && isQuestSatisfied(q); }},
     {id:"meta_all_stats", icon:"🎖️", title:"Разносторонний", desc:"Прокачай Силу, Интеллект, Дисциплину и Здоровье одновременно выше 100",
       lore:"Ни одна сторона не была принесена в жертву другой — редкое и трудное равновесие.",
@@ -1810,6 +1852,9 @@
     var grid = document.getElementById("achGrid");
     grid.innerHTML = "";
     ACH_DEFS.forEach(function(def){
+      // Ачивки, завязанные на конкретный квест (например, личную ветку мечты), не
+      // показываются вообще, если у этого пользователя такого квеста нет.
+      if(def.requiresQuestId && !getQuestById(def.requiresQuestId)) return;
       var st = state.achievements.filter(function(a){return a.id===def.id;})[0];
       var unlocked = st && st.unlocked;
       var card = document.createElement("div");
@@ -2049,6 +2094,8 @@
 
     if(e.target.id === "chapterNextBtn"){ advanceChapter(); return; }
     if(e.target.id === "themeToggleBtn"){ applyTheme(state.theme === "minecraft" ? "rdr2" : "minecraft"); return; }
+    if(e.target.id === "achToggleBtn"){ renderAchievements(); document.getElementById("achBackdrop").classList.remove("hidden"); return; }
+    if(e.target.id === "achClose"){ document.getElementById("achBackdrop").classList.add("hidden"); return; }
 
     if(e.target.id === "smokingSetupSave"){
       state.smoking.yearsSmoking = parseFloat(document.getElementById("smYears").value) || 0;
@@ -2329,6 +2376,8 @@
     } else {
       syncStatusEl.textContent = "💻 Тестовый режим вне Telegram — прогресс живёт только в этой вкладке, сохраняй в файл вручную.";
     }
+
+    mergePersonalContentIfOwner();
 
     applyDailyReset();
     applyTheme(state.theme);
