@@ -746,6 +746,11 @@
       </div>
     </div>
 
+    <div class="card" id="addTrackerRow" style="display:none;">
+      <div class="card-sub" style="margin:0 0 8px;">Не все личные дневники включены — добавить можно в любой момент.</div>
+      <div class="controls" id="addTrackerBody" style="margin-top:0;"></div>
+    </div>
+
     <div class="fold" id="foldSettings">
       <button class="row-link" data-fold="foldSettings">
         <span class="row-ico">⚙️</span>
@@ -882,6 +887,44 @@
   </div>
 </div>
 
+<!-- Онбординг новичка: показывается один раз, до первой отрисовки основного приложения
+     (см. maybeShowOnboarding() в конце скрипта). Не модалка поверх приложения в обычном
+     смысле — это то, что человек видит вместо приложения, пока не пройдёт шаги. -->
+<div class="modal-backdrop hidden" id="onboardingBackdrop">
+  <div class="modal wide parchment onboarding-modal">
+    <div id="onboardingStep1">
+      <div class="big-emoji">🤠</div>
+      <h3>Добро пожаловать на тропу</h3>
+      <p class="secondary">Дневник Героя переводит твои дела в задания, статы и опыт. Заданий много,
+        и они сгруппированы по темам — отметь, какие темы важны тебе сейчас. Остальные можно
+        включить позже в любой момент, ничего не потеряется.</p>
+      <div class="field" style="text-align:left;">
+        <label>Темы заданий</label>
+        <div class="tabs" id="onbCategoryTabs" style="flex-wrap:wrap;overflow:visible;padding-bottom:2px;"></div>
+      </div>
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button class="btn ghost small" id="onbTakeAllBtn">Взять всё и начать</button>
+        <button class="btn" id="onbStep1NextBtn">Далее</button>
+      </div>
+    </div>
+    <div id="onboardingStep2" style="display:none;">
+      <div class="big-emoji">📓</div>
+      <h3>Личные трекеры</h3>
+      <p class="secondary">Отдельно — три личных дневника: табак, сон, алкоголь. Они не показаны
+        по умолчанию — включай только то, что реально хочешь вести. Добавить их можно и
+        позже, в разделе «Ещё».</p>
+      <div class="field" style="text-align:left;">
+        <label>Хочу вести</label>
+        <div class="tabs" id="onbTrackerTabs" style="flex-wrap:wrap;overflow:visible;padding-bottom:2px;"></div>
+      </div>
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button class="btn ghost small" id="onbStep2BackBtn">Назад</button>
+        <button class="btn" id="onbFinishBtn">Начать путь</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Generic confirm modal (window.confirm() is unreliable inside a sandboxed preview, so this is the real one) -->
 <div class="modal-backdrop hidden" id="confirmBackdrop">
   <div class="modal parchment">
@@ -922,6 +965,21 @@
   var DEFAULT_THEME = "night";
   function themeById(id){ return THEMES.filter(function(t){ return t.id === id; })[0]; }
   var DEFAULT_AVATARS = THEMES.reduce(function(acc, t){ acc[t.id] = t.avatar; return acc; }, {});
+
+  // Темы, которые реально предлагаются на онбординге — с готовым набором заданий на
+  // каждого. "accumulation" сюда не входит: под неё нет ни одного задания вообще ни у
+  // кого (нечего включать/выключать), а "dream" — личная сюжетная линия одного лишь
+  // владельца (см. isOwner()/personalDreamQuests) и для всех остальных тоже всегда пуста.
+  // Обе эти темы поэтому исключаются из состояния автоматически при завершении онбординга
+  // (см. finishOnboarding), а не просто оставлены невыбранными — иначе они бы висели
+  // вечно пустыми плитками статов, как это раньше и происходило.
+  var ONBOARDING_CATEGORIES = ["strength", "intellect", "discipline", "health", "household", "social"];
+  var ONBOARDING_ALWAYS_EMPTY = ["accumulation"];
+  var ONBOARDING_TRACKERS = [
+    {key:"smoking", icon:"🚬", label:"Дневник табака"},
+    {key:"sleep",   icon:"😴", label:"Дневник сна"},
+    {key:"alcohol", icon:"🥃", label:"Дневник выпивки"}
+  ];
 
   var CHAPTERS = [
     {title:"Глава I — Выезд", text:"Ты только выехал из города. Дорога длинная, а мешок почти пуст. Разберись с первыми делами и найди свой ритм.",
@@ -1230,13 +1288,22 @@
   // file (older files predate this content) without touching anything the player already has —
   // only additive, never overwrites or removes existing progress.
   function mergeExpansionContent(){
+    // Сохранения, сделанные до появления онбординга, — это уже играющие люди, которым
+    // никто не задавал вопрос про темы. Ставить их задним числом на паузу нельзя: считаем,
+    // что они прошли онбординг и ничего не исключали.
+    if(typeof state.onboardingComplete !== "boolean"){ state.onboardingComplete = true; }
+    if(!Array.isArray(state.excludedCategories)){ state.excludedCategories = []; }
+    var excluded = state.excludedCategories;
+
     defaultStatDefs().forEach(function(def){
+      if(excluded.indexOf(def.key) !== -1) return; // сам отказался на онбординге — не подмешиваем обратно
       if(!getStatDef(def.key)){
         state.statDefs.push(def);
         state.stats[def.key] = 0;
       }
     });
     expansionQuests().forEach(function(q){
+      if(excluded.indexOf(q.category) !== -1) return;
       if(!getQuestById(q.id)){ state.quests.push(q); }
     });
     // Сохранения, сделанные до появления общего босса, приходят без этого поля.
@@ -1244,6 +1311,12 @@
       state.worldBoss = {wave:0, contribution:0, total:0};
     }
     if(typeof state.worldBoss.total !== "number"){ state.worldBoss.total = state.worldBoss.contribution || 0; }
+    // Трекеры существовали и раньше, но были видны всем без исключений — у уже играющих
+    // людей .enabled ещё нет, и по умолчанию он должен остаться включённым (не прятать то,
+    // что человек уже видел и, возможно, вёл).
+    [state.smoking, state.sleep, state.alcohol].forEach(function(t){
+      if(t && typeof t.enabled !== "boolean"){ t.enabled = true; }
+    });
   }
 
   var ACH_DEFS = [
@@ -1361,9 +1434,15 @@
       stats:defaultStats(),
       quests:defaultQuests(),
       achievements:ACH_DEFS.map(function(a){ return {id:a.id, unlocked:false, unlockedDate:null}; }),
-      smoking:{setupDone:false, yearsSmoking:0, baselinePerDay:0, log:[]},
-      sleep:{setupDone:false, targetHours:8, log:[]},
-      alcohol:{log:[]},
+      // Новый профиль проходит шаги выбора тем/трекеров (см. maybeShowOnboarding()) прежде
+      // чем увидеть само приложение — до этого onboardingComplete=false. excludedCategories
+      // хранит темы, от которых человек сам отказался на этом шаге: mergeExpansionContent()
+      // уважает список и не подмешивает их обратно при будущих обновлениях контента.
+      onboardingComplete:false,
+      excludedCategories:[],
+      smoking:{setupDone:false, yearsSmoking:0, baselinePerDay:0, log:[], enabled:false},
+      sleep:{setupDone:false, targetHours:8, log:[], enabled:false},
+      alcohol:{log:[], enabled:false},
       companion:{level:1, xp:0},
       chapterIndex:0,
       gold:0,
@@ -2120,7 +2199,34 @@
     renderReport();
     renderRewards();
     renderMoreNotes();
+    renderTrackerVisibility();
     scheduleServerSave();
+  }
+
+  // Личные трекеры показываются в «Ещё» только если включены (по умолчанию — на онбординге,
+  // либо руками позже). Не через отдельный «view» — просто прячем/показываем уже
+  // существующие .fold-блоки и предлагаем включить оставшиеся одной строкой снизу.
+  var TRACKER_FOLDS = [
+    {foldId:"foldSmoking", key:"smoking", icon:"🚬", label:"Табак"},
+    {foldId:"foldSleep",   key:"sleep",   icon:"😴", label:"Сон"},
+    {foldId:"foldAlcohol", key:"alcohol", icon:"🥃", label:"Алкоголь"}
+  ];
+  function renderTrackerVisibility(){
+    var disabled = [];
+    TRACKER_FOLDS.forEach(function(t){
+      var enabled = state[t.key] && state[t.key].enabled !== false;
+      var foldEl = document.getElementById(t.foldId);
+      if(foldEl){ foldEl.style.display = enabled ? "" : "none"; }
+      if(!enabled){ disabled.push(t); }
+    });
+    var row = document.getElementById("addTrackerRow");
+    var body = document.getElementById("addTrackerBody");
+    if(row){ row.style.display = disabled.length ? "" : "none"; }
+    if(body){
+      body.innerHTML = disabled.map(function(t){
+        return '<button class="btn small ghost" data-add-tracker="' + t.key + '">+ ' + t.icon + ' ' + escapeHtml(t.label) + '</button>';
+      }).join("");
+    }
   }
 
   /* ---------- Итог дня ----------
@@ -2814,6 +2920,96 @@
     }).join("");
   }
 
+  /* ---------- Онбординг новичка ----------
+     Показывается один раз для брендового нового профиля (state.onboardingComplete === false),
+     до первой отрисовки основного приложения — см. maybeShowOnboarding() в самом конце
+     скрипта. Выбор тем сразу решает, какие квесты/боссы/статы вообще попадут в state (см.
+     finishOnboarding) — не «спрятать», а буквально не добавлять, как и просили. */
+  var onbSelectedCats = null;
+  var onbSelectedTrackers = null;
+  var onboardingDoneCallback = null;
+
+  function renderOnboardingCategoryTabs(){
+    var row = document.getElementById("onbCategoryTabs");
+    if(!row) return;
+    row.innerHTML = ONBOARDING_CATEGORIES.map(function(key){
+      var def = getStatDefFromDefaults(key);
+      var active = onbSelectedCats.indexOf(key) !== -1;
+      return '<div class="tab' + (active ? " active" : "") + '" data-onb-cat="' + key + '">' +
+        (def ? def.icon + " " : "") + escapeHtml(def ? def.label : key) + '</div>';
+    }).join("");
+  }
+  function renderOnboardingTrackerTabs(){
+    var row = document.getElementById("onbTrackerTabs");
+    if(!row) return;
+    row.innerHTML = ONBOARDING_TRACKERS.map(function(t){
+      var active = onbSelectedTrackers.indexOf(t.key) !== -1;
+      return '<div class="tab' + (active ? " active" : "") + '" data-onb-tracker="' + t.key + '">' +
+        t.icon + ' ' + escapeHtml(t.label) + '</div>';
+    }).join("");
+  }
+  function getStatDefFromDefaults(key){
+    return defaultStatDefs().filter(function(d){ return d.key === key; })[0];
+  }
+
+  function shouldShowOnboarding(){ return state.onboardingComplete !== true; }
+
+  function showOnboarding(onDone){
+    onbSelectedCats = ONBOARDING_CATEGORIES.slice(); // всё отмечено по умолчанию — проще снять лишнее, чем ничего не увидеть
+    onbSelectedTrackers = [];
+    onboardingDoneCallback = onDone;
+    renderOnboardingCategoryTabs();
+    renderOnboardingTrackerTabs();
+    document.getElementById("onboardingStep1").style.display = "";
+    document.getElementById("onboardingStep2").style.display = "none";
+    document.getElementById("onboardingBackdrop").classList.remove("hidden");
+  }
+
+  // includeEverything — путь кнопки «Взять всё и начать»: пропускает шаг трекеров и берёт
+  // все темы разом, без промежуточных вопросов.
+  function finishOnboarding(includeEverything){
+    var cats = includeEverything ? ONBOARDING_CATEGORIES.slice() : onbSelectedCats;
+    var trackerKeys = includeEverything
+      ? ONBOARDING_TRACKERS.map(function(t){ return t.key; })
+      : onbSelectedTrackers;
+
+    var excluded = ONBOARDING_CATEGORIES.filter(function(k){ return cats.indexOf(k) === -1; })
+      .concat(ONBOARDING_ALWAYS_EMPTY);
+    if(!isOwner()){ excluded.push("dream"); } // личная сюжетная линия — у остальных для неё всё равно нет заданий
+
+    state.statDefs = state.statDefs.filter(function(d){ return excluded.indexOf(d.key) === -1; });
+    excluded.forEach(function(k){ delete state.stats[k]; });
+    state.quests = state.quests.filter(function(q){ return excluded.indexOf(q.category) === -1; });
+    state.excludedCategories = excluded;
+
+    state.smoking.enabled = trackerKeys.indexOf("smoking") !== -1;
+    state.sleep.enabled = trackerKeys.indexOf("sleep") !== -1;
+    state.alcohol.enabled = trackerKeys.indexOf("alcohol") !== -1;
+
+    state.onboardingComplete = true;
+    document.getElementById("onboardingBackdrop").classList.add("hidden");
+    var cb = onboardingDoneCallback;
+    onboardingDoneCallback = null;
+    if(cb) cb();
+  }
+
+  // Общий хвост запуска приложения (после того как контент state уже точно окончательный —
+  // и для старого профиля, и для только что прошедшего онбординг): дневной сброс, применение
+  // темы и первая отрисовка. Вынесено отдельно, потому что путей сюда два — обычный boot()
+  // и «Сжечь всё дотла» (тоже стартует по сути новый профиль).
+  function enterApp(){
+    applyDailyReset();
+    applyTheme(state.theme);
+    render(); // также отправляет текущее состояние на сервер через scheduleServerSave()
+  }
+
+  // Единая точка входа: либо сразу в приложение (уже онбордился), либо сперва через
+  // шаги выбора тем/трекеров, и только по их завершении — в приложение.
+  function maybeShowOnboarding(){
+    if(!shouldShowOnboarding()){ enterApp(); return; }
+    showOnboarding(enterApp);
+  }
+
   /* ---------- Переключение экранов ----------
      Четыре вкладки вместо одной ленты на пятнадцать экранов. Состояние живёт только в
      памяти (не в сохранении): при следующем входе логичнее открыть «Сегодня», а не тот
@@ -2859,6 +3055,33 @@
     // Выбор темы оформления
     var themeBtn = e.target.closest("[data-theme-id]");
     if(themeBtn){ applyTheme(themeBtn.getAttribute("data-theme-id")); scheduleServerSave(); return; }
+
+    // Онбординг: тема-чипсы шага 1
+    var onbCat = e.target.closest("[data-onb-cat]");
+    if(onbCat){
+      var catKey = onbCat.getAttribute("data-onb-cat");
+      var catIdx = onbSelectedCats.indexOf(catKey);
+      if(catIdx === -1){ onbSelectedCats.push(catKey); } else { onbSelectedCats.splice(catIdx, 1); }
+      renderOnboardingCategoryTabs();
+      return;
+    }
+    // Онбординг: трекеры-чипсы шага 2
+    var onbTracker = e.target.closest("[data-onb-tracker]");
+    if(onbTracker){
+      var trKey = onbTracker.getAttribute("data-onb-tracker");
+      var trIdx = onbSelectedTrackers.indexOf(trKey);
+      if(trIdx === -1){ onbSelectedTrackers.push(trKey); } else { onbSelectedTrackers.splice(trIdx, 1); }
+      renderOnboardingTrackerTabs();
+      return;
+    }
+
+    // Включить ранее пропущенный трекер из «Ещё» (не только на онбординге)
+    var addTrackerBtn = e.target.closest("[data-add-tracker]");
+    if(addTrackerBtn){
+      var addKey = addTrackerBtn.getAttribute("data-add-tracker");
+      if(state[addKey]){ state[addKey].enabled = true; render(); showToast("Трекер добавлен"); }
+      return;
+    }
 
     // Строка главы на «Сегодня» ведёт на экран «Герой», где глава расписана целиком
     if(e.target.closest("#chapterLine")){ showView("hero"); return; }
@@ -2967,6 +3190,18 @@
   document.getElementById("levelUpClose").addEventListener("click", function(){
     document.getElementById("levelUpBackdrop").classList.add("hidden");
   });
+
+  document.getElementById("onbStep1NextBtn").addEventListener("click", function(){
+    if(!onbSelectedCats.length){ showToast("Отметь хотя бы одну тему — или нажми «Взять всё»"); return; }
+    document.getElementById("onboardingStep1").style.display = "none";
+    document.getElementById("onboardingStep2").style.display = "";
+  });
+  document.getElementById("onbStep2BackBtn").addEventListener("click", function(){
+    document.getElementById("onboardingStep2").style.display = "none";
+    document.getElementById("onboardingStep1").style.display = "";
+  });
+  document.getElementById("onbTakeAllBtn").addEventListener("click", function(){ finishOnboarding(true); });
+  document.getElementById("onbFinishBtn").addEventListener("click", function(){ finishOnboarding(false); });
 
   document.getElementById("confirmCancel").addEventListener("click", function(){
     pendingConfirmCallback = null;
@@ -3138,10 +3373,9 @@
     var warnExtra = tgAuthHeader() ? " Это также сотрёт сохранённый на сервере прогресс." : " Это нельзя отменить, если прогресс не сохранён в файл.";
     askConfirm("Точно сжечь всё дотла?", "Это нельзя отменить." + warnExtra, function(){
       state = defaultState();
-      applyDailyReset();
-      applyTheme(state.theme);
-      render(); // also pushes the fresh defaultState() to the server via scheduleServerSave()
+      mergePersonalContentIfOwner();
       showToast("Дневник сожжён, начинаем с чистого листа");
+      maybeShowOnboarding(); // чистый лист — снова спрашиваем про темы, как у нового профиля
     });
   });
 
@@ -3203,16 +3437,17 @@
 
     mergePersonalContentIfOwner();
 
-    applyDailyReset();
-    // Старые сохранения помнят темы "rdr2"/"minecraft", которых больше нет —
-    // applyTheme сам откатится на тему по умолчанию, если id незнакомый.
-    applyTheme(state.theme);
-    render();
-    showMissedToastIfAny();
-
-    // Общий босс подтягивается уже после первой отрисовки — он не должен задерживать
-    // появление собственно дневника, если сервер отвечает медленно.
-    fetchWorldBoss();
+    // Дальше — либо сразу приложение (уже проходил онбординг), либо сперва шаги выбора
+    // тем/трекеров и только по их завершении — само приложение. applyTheme сам откатится
+    // на тему по умолчанию, если сохранение помнит незнакомый id (старые "rdr2"/"minecraft").
+    function afterOnboarding(){
+      enterApp();
+      showMissedToastIfAny();
+      // Общий босс подтягивается уже после первой отрисовки — он не должен задерживать
+      // появление собственно дневника, если сервер отвечает медленно.
+      fetchWorldBoss();
+    }
+    if(shouldShowOnboarding()){ showOnboarding(afterOnboarding); } else { afterOnboarding(); }
   })();
 })();
 </script>
