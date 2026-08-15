@@ -130,9 +130,42 @@
     border:3px solid var(--gold);
     box-shadow:0 0 0 2px var(--ink), inset 0 0 10px rgba(0,0,0,0.25);
     display:flex;align-items:center;justify-content:center;
+    position:relative;
   }
   body:not([data-theme="minecraft"]) .avatar-frame{filter:sepia(.3);}
   .avatar{font-size:42px;}
+
+  /* ---------- Визуальные награды за главы: рамка аватара + значок + печати ---------- */
+  .avatar-frame.tier-1{border-color:#8a6b3d;}
+  .avatar-frame.tier-2{
+    border-color:#7a8a94;
+    box-shadow:0 0 0 2px var(--ink), inset 0 0 10px rgba(0,0,0,0.25), 0 0 8px rgba(122,138,148,.5);
+  }
+  .avatar-frame.tier-3{
+    border-color:#c9c9d6;
+    box-shadow:0 0 0 2px var(--ink), inset 0 0 10px rgba(0,0,0,0.25), 0 0 10px rgba(201,201,214,.6);
+  }
+  .avatar-frame.tier-4{
+    border-color:var(--gold);
+    box-shadow:0 0 0 2px var(--ink), inset 0 0 10px rgba(0,0,0,0.25), 0 0 12px rgba(201,147,47,.7);
+  }
+  .avatar-frame.tier-5{border-color:var(--gold);animation:avatarLegendGlow 2.4s ease-in-out infinite;}
+  @keyframes avatarLegendGlow{
+    0%,100%{box-shadow:0 0 0 2px var(--ink), inset 0 0 10px rgba(0,0,0,.25), 0 0 10px rgba(201,147,47,.5);}
+    50%{box-shadow:0 0 0 2px var(--ink), inset 0 0 10px rgba(0,0,0,.25), 0 0 22px rgba(201,147,47,.95);}
+  }
+  .avatar-badge{
+    position:absolute;bottom:-6px;right:-6px;font-size:16px;line-height:1;
+    background:var(--paper);border:2px solid var(--ink);border-radius:50%;
+    width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.4);
+  }
+  .chapter-seals{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+  .chapter-seal{
+    font-size:17px;line-height:1;background:var(--paper-2);border:1px solid var(--border-ink);
+    border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+    cursor:default;
+  }
   .hero-info{flex:1;min-width:220px;}
   .name-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
   .char-name{font-family:var(--font-display);font-size:26px;letter-spacing:.02em;color:var(--ink);}
@@ -441,7 +474,8 @@
   @media (prefers-reduced-motion: reduce){
     .pip-bar.bar-pulse .pip, .quest-row.just-completed, .quest-row.boss-hit, .quest-check.just-checked,
     #levelUpBackdrop:not(.hidden) .modal, #levelUpBackdrop:not(.hidden) .big-emoji,
-    .toast.ach, .ember, .block-particle, .ach-card.unlocked .ach-lore, .narrator-line{
+    .toast.ach, .ember, .block-particle, .ach-card.unlocked .ach-lore, .narrator-line,
+    .avatar-frame.tier-5{
       animation:none !important;
     }
   }
@@ -458,7 +492,7 @@
 <div class="app">
 
   <header class="hero parchment">
-    <div class="avatar-frame"><div class="avatar" id="avatarEmoji">🤠</div></div>
+    <div class="avatar-frame" id="avatarFrame"><div class="avatar" id="avatarEmoji">🤠</div><div class="avatar-badge" id="avatarBadge" style="display:none;"></div></div>
     <div class="hero-info">
       <div class="name-row">
         <span class="char-name" id="charName">Степа</span>
@@ -690,6 +724,34 @@
       nextRequires:{questId:"boss_procrastination", minQuests:20}},
     {title:"Глава VI — Легенда", text:"Твоё имя уже кое-что значит в этих краях. Дальше — только по-крупному.", nextRequires:null}
   ];
+
+  // Визуальная награда за закрытие каждой из первых пяти глав (у шестой нет «следующей»,
+  // её собственная награда — сама пятая, высшая рамка аватара, см. applyAvatarProgress()).
+  // seal — печать в полосе под главой, badge — маленький значок поверх рамки аватара
+  // (виден только для самой последней закрытой главы, не копится сразу несколько).
+  var CHAPTER_REWARDS = [
+    {seal:"🥾", sealLabel:"Первые мили пройдены", badge:"🥾"},
+    {seal:"🐾", sealLabel:"Тропа найдена", badge:"🐾"},
+    {seal:"⛈️", sealLabel:"Буря позади", badge:"⛈️"},
+    {seal:"⛰️", sealLabel:"Перевал взят", badge:"⛰️"},
+    {seal:"🌅", sealLabel:"Открытые земли покорены", badge:"🌅"}
+  ];
+
+  function applyAvatarProgress(){
+    var frame = document.getElementById("avatarFrame");
+    var badge = document.getElementById("avatarBadge");
+    var tier = Math.max(0, Math.min(5, state.chapterIndex));
+    for(var t=1;t<=5;t++){ frame.classList.remove("tier-" + t); }
+    if(tier > 0){ frame.classList.add("tier-" + tier); }
+    var lastReward = CHAPTER_REWARDS[state.chapterIndex - 1];
+    if(lastReward){
+      badge.textContent = lastReward.badge;
+      badge.style.display = "flex";
+      badge.title = lastReward.sealLabel;
+    } else {
+      badge.style.display = "none";
+    }
+  }
 
   function hexToRgba(hex, a){
     hex = hex.replace("#","");
@@ -1790,7 +1852,13 @@
       html += '<div class="chapter-progress">' + renderPipBar(progressFilled, 10, "var(--gold)", "small") + '</div>';
       html += '<button class="btn small" id="chapterNextBtn" ' + (st.met ? "" : "disabled") + '>Следующая глава →</button>';
     }
+    if(state.chapterIndex > 0){
+      html += '<div class="chapter-seals">' + CHAPTER_REWARDS.slice(0, state.chapterIndex).map(function(r){
+        return '<div class="chapter-seal" title="' + escapeHtml(r.sealLabel) + '">' + r.seal + '</div>';
+      }).join("") + '</div>';
+    }
     body.innerHTML = html;
+    applyAvatarProgress();
   }
 
   function renderStats(){
